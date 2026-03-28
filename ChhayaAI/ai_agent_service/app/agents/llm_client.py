@@ -1,5 +1,12 @@
 import os
+from pathlib import Path
+
+from dotenv import load_dotenv
 from groq import Groq
+
+_SERVICE_ROOT = Path(__file__).resolve().parents[2]
+load_dotenv(_SERVICE_ROOT / ".env")
+load_dotenv()
 
 SYSTEM_PROMPT = """
 You are a Geo-Spatial AI Assistant.
@@ -59,8 +66,8 @@ _MAP_KEYWORDS = (
     "drive",
 )
 
-# 1. Initialize the client (Keys come from environment variables)
-client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+# Groq reads GROQ_API_KEY from the environment; .env is loaded above.
+client = Groq(api_key=(os.getenv("GROQ_API_KEY") or "").strip() or None)
 
 
 def _keyword_fallback_intent(query: str) -> str:
@@ -99,7 +106,7 @@ def classify_map_or_data(query: str) -> str:
     """
     try:
         completion = client.chat.completions.create(
-            model="llama3-8b-8192",
+            model="llama-3.1-8b-instant",
             messages=[
                 {"role": "system", "content": CLASSIFICATION_SYSTEM_PROMPT},
                 {"role": "user", "content": f"Query: {query}\n\nOne word:"},
@@ -129,7 +136,7 @@ def get_ai_response(user_input: str):
     try:
         # 2. The API Call
         completion = client.chat.completions.create(
-            model="llama3-8b-8192",  # The efficient choice
+            model="llama-3.1-8b-instant",
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": user_input},
