@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct DashboardView: View {
+    @Environment(AuthService.self) private var authService
     @State private var showingSOSConfirmation = false
 
     var body: some View {
@@ -47,10 +48,11 @@ struct DashboardView: View {
 
     private var greetingText: String {
         let hour = Calendar.current.component(.hour, from: Date())
+        let name = authService.displayName
         switch hour {
-        case 5..<12:  return "Good Morning"
-        case 12..<17: return "Good Afternoon"
-        default:      return "Good Evening"
+        case 5..<12:  return "Good Morning, \(name)"
+        case 12..<17: return "Good Afternoon, \(name)"
+        default:      return "Good Evening, \(name)"
         }
     }
 
@@ -298,4 +300,5 @@ struct DashboardView: View {
 
 #Preview {
     DashboardView()
+        .environment(AuthService())
 }

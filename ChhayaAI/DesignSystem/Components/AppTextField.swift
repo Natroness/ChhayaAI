@@ -6,10 +6,12 @@ struct AppTextField: View {
     var icon: String?
     var trailingIcon: String?
     var isPill: Bool = false
+    var isSecure: Bool = false
     var onTrailingAction: (() -> Void)?
     var onSubmit: (() -> Void)?
 
     @FocusState private var isFocused: Bool
+    @State private var isPasswordVisible = false
 
     private var cornerRadius: CGFloat {
         isPill ? AppRadius.xl : AppRadius.sm
@@ -27,13 +29,27 @@ struct AppTextField: View {
                     )
             }
 
-            TextField(placeholder, text: $text)
-                .textStyle(.body)
-                .foregroundStyle(SemanticColor.textPrimary)
-                .focused($isFocused)
-                .onSubmit { onSubmit?() }
+            Group {
+                if isSecure && !isPasswordVisible {
+                    SecureField(placeholder, text: $text)
+                } else {
+                    TextField(placeholder, text: $text)
+                }
+            }
+            .textStyle(.body)
+            .foregroundStyle(SemanticColor.textPrimary)
+            .focused($isFocused)
+            .onSubmit { onSubmit?() }
 
-            if let trailingIcon {
+            if isSecure {
+                Button {
+                    isPasswordVisible.toggle()
+                } label: {
+                    Image(systemName: isPasswordVisible ? "eye.slash" : "eye")
+                        .font(.system(size: AppFont.Size.label))
+                        .foregroundStyle(SemanticColor.iconSecondary)
+                }
+            } else if let trailingIcon {
                 Button {
                     onTrailingAction?()
                 } label: {
