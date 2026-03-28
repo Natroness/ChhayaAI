@@ -20,6 +20,10 @@ Package.swift
 Package.resolved 
 ##in most app repos
 
+.cursor/
+
+design-tokens-summary.md
+
 .build/
 Carthage/Build/
 Pods/
