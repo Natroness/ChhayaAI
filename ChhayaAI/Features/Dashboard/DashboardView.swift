@@ -1,13 +1,31 @@
+import FirebaseAuth
 import SwiftUI
 
 struct DashboardView: View {
     @Environment(AuthService.self) private var authService
+    @Environment(AgentAPIClient.self) private var agentAPI
+    @Environment(AgentSessionStore.self) private var sessionStore
+    @Environment(LocationManager.self) private var locationManager
+
+    @Binding var selectedTab: AppTab
+
     @State private var showingSOSConfirmation = false
+    @State private var sosBusy = false
+    @State private var sosFeedback: String?
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Spacing.space6) {
                 greetingSection
+                if let sosFeedback {
+                    Text(sosFeedback)
+                        .textStyle(.caption)
+                        .foregroundStyle(SemanticColor.statusError)
+                        .padding(Spacing.space3)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(SemanticColor.statusError.opacity(0.08))
+                        .clipShape(RoundedRectangle(cornerRadius: AppRadius.sm))
+                }
                 activeAlertBanner
                 quickActions
                 nearbyUnitsSection
@@ -18,18 +36,20 @@ struct DashboardView: View {
             .padding(.bottom, Spacing.space12)
         }
         .background(ComponentColor.Screen.bg)
+        .onAppear {
+            locationManager.requestWhenInUse()
+        }
         .confirmationDialog(
             "Confirm SOS",
             isPresented: $showingSOSConfirmation,
             titleVisibility: .visible
         ) {
-            Button("Dispatch Ambulance", role: .destructive) {
-                let gen = UINotificationFeedbackGenerator()
-                gen.notificationOccurred(.warning)
+            Button("Send emergency request", role: .destructive) {
+                Task { await runEmergencyFlow() }
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("This will dispatch the nearest available ambulance to your current GPS location.")
+            Text("This notifies the assistant using your current location. Use only for real emergencies.")
         }
     }
 
@@ -78,12 +98,23 @@ struct DashboardView: View {
                         Spacer()
                         StatusBadge(variant: .active)
                     }
-                    Text("All services operational. 12 units available in your area.")
+                    Text(statusBlurb)
                         .textStyle(.caption)
                         .foregroundStyle(SemanticColor.textSecondary)
                 }
             }
         }
+    }
+
+    private var statusBlurb: String {
+        if let r = sessionStore.lastResponse,
+           r.responseType == "EMERGENCY_FLOW",
+           let m = r.chatMessage?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !m.isEmpty
+        {
+            return m
+        }
+        return "All services operational. Use SOS only for real emergencies."
     }
 
     // MARK: - Quick Actions
@@ -120,6 +151,7 @@ struct DashboardView: View {
         Button {
             let gen = UIImpactFeedbackGenerator(style: .heavy)
             gen.impactOccurred()
+            sosFeedback = nil
             showingSOSConfirmation = true
         } label: {
             HStack(spacing: Spacing.space3) {
@@ -127,15 +159,20 @@ struct DashboardView: View {
                     Circle()
                         .fill(BrandColor.white.opacity(0.2))
                         .frame(width: 48, height: 48)
-                    Image(systemName: "cross.circle.fill")
-                        .font(.system(size: 26, weight: .bold))
-                        .foregroundStyle(BrandColor.white)
+                    if sosBusy {
+                        ProgressView()
+                            .tint(BrandColor.white)
+                    } else {
+                        Image(systemName: "cross.circle.fill")
+                            .font(.system(size: 26, weight: .bold))
+                            .foregroundStyle(BrandColor.white)
+                    }
                 }
                 VStack(alignment: .leading, spacing: 2) {
                     Text("SOS Emergency")
                         .textStyle(.headingMD)
                         .foregroundStyle(BrandColor.white)
-                    Text("Tap to dispatch nearest ambulance")
+                    Text("Tap to contact the assistant with your location")
                         .textStyle(.caption)
                         .foregroundStyle(BrandColor.white.opacity(0.8))
                 }
@@ -155,6 +192,7 @@ struct DashboardView: View {
             .clipShape(RoundedRectangle(cornerRadius: AppRadius.md))
         }
         .buttonStyle(.plain)
+        .disabled(sosBusy)
     }
 
     private func quickActionTile(icon: String, title: String, color: Color) -> some View {
@@ -188,52 +226,23 @@ struct DashboardView: View {
                     .textStyle(.headingMD)
                     .foregroundStyle(SemanticColor.textPrimary)
                 Spacer()
-                Text("View All")
-                    .textStyle(.labelSemibold)
-                    .foregroundStyle(SemanticColor.actionPrimary)
+                Button("Open map") {
+                    selectedTab = .map
+                }
+                .textStyle(.labelSemibold)
+                .foregroundStyle(SemanticColor.actionPrimary)
             }
 
-            unitCard(
-                id: "AMB-2847",
-                type: "Advanced Life Support",
-                distance: "2.3 km",
-                badge: .enRoute
-            )
-            unitCard(
-                id: "AMB-1192",
-                type: "Basic Life Support",
-                distance: "4.1 km",
-                badge: .active
-            )
-        }
-    }
-
-    private func unitCard(id: String, type: String, distance: String, badge: BadgeVariant) -> some View {
-        InfoCard {
-            HStack(spacing: Spacing.space3) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: AppRadius.sm)
-                        .fill(SemanticColor.actionPrimary.opacity(AppOpacity.overlaySubtle))
-                        .frame(width: 48, height: 48)
-                    Image(systemName: "cross.vial.fill")
-                        .font(.system(size: 20))
-                        .foregroundStyle(SemanticColor.actionPrimary)
-                }
-
-                VStack(alignment: .leading, spacing: Spacing.space1) {
-                    HStack {
-                        Text(id)
-                            .textStyle(.labelBold)
-                            .foregroundStyle(SemanticColor.textPrimary)
-                        Spacer()
-                        StatusBadge(variant: badge)
-                    }
-                    Text(type)
-                        .textStyle(.caption)
+            InfoCard {
+                VStack(alignment: .leading, spacing: Spacing.space2) {
+                    Text("Live matches come from the map agent when location is enabled.")
+                        .textStyle(.body)
                         .foregroundStyle(SemanticColor.textSecondary)
-                    Text(distance)
-                        .textStyle(.captionMedium)
-                        .foregroundStyle(SemanticColor.textAccent)
+                    Button("Go to map tab") {
+                        selectedTab = .map
+                    }
+                    .textStyle(.labelSemibold)
+                    .foregroundStyle(SemanticColor.actionPrimary)
                 }
             }
         }
@@ -248,25 +257,32 @@ struct DashboardView: View {
                     .textStyle(.headingMD)
                     .foregroundStyle(SemanticColor.textPrimary)
                 Spacer()
-                Text("History")
-                    .textStyle(.labelSemibold)
-                    .foregroundStyle(SemanticColor.actionPrimary)
+                Button("Chat") {
+                    selectedTab = .chat
+                }
+                .textStyle(.labelSemibold)
+                .foregroundStyle(SemanticColor.actionPrimary)
             }
 
-            activityRow(
-                icon: "checkmark.circle.fill",
-                iconColor: SemanticColor.statusSuccess,
-                title: "Emergency #EMR-2024-8847",
-                subtitle: "Completed — 6 min response",
-                time: "2h ago"
-            )
-            activityRow(
-                icon: "exclamationmark.triangle.fill",
-                iconColor: SemanticColor.statusWarning,
-                title: "Alert: Heavy Traffic Zone",
-                subtitle: "Route B closed for maintenance",
-                time: "5h ago"
-            )
+            if let last = sessionStore.lastResponse?.chatMessage?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !last.isEmpty
+            {
+                activityRow(
+                    icon: "bubble.left.and.bubble.right.fill",
+                    iconColor: SemanticColor.actionPrimary,
+                    title: "Last assistant reply",
+                    subtitle: last,
+                    time: "Just now"
+                )
+            } else {
+                activityRow(
+                    icon: "clock.fill",
+                    iconColor: SemanticColor.textSecondary,
+                    title: "No recent activity",
+                    subtitle: "Open AI Agent to start a conversation.",
+                    time: ""
+                )
+            }
         }
     }
 
@@ -284,21 +300,74 @@ struct DashboardView: View {
                 Text(subtitle)
                     .textStyle(.caption)
                     .foregroundStyle(SemanticColor.textSecondary)
+                    .lineLimit(4)
             }
 
             Spacer()
 
-            Text(time)
-                .textStyle(.caption)
-                .foregroundStyle(SemanticColor.textSecondary)
+            if !time.isEmpty {
+                Text(time)
+                    .textStyle(.caption)
+                    .foregroundStyle(SemanticColor.textSecondary)
+            }
         }
         .padding(Spacing.space4)
         .background(ComponentColor.Card.bg)
         .clipShape(RoundedRectangle(cornerRadius: AppRadius.sm))
     }
+
+    // MARK: - Emergency API
+
+    private func runEmergencyFlow() async {
+        await MainActor.run {
+            sosBusy = true
+            sosFeedback = nil
+        }
+        let token: String? = await withCheckedContinuation { cont in
+            Auth.auth().currentUser?.getIDTokenForcingRefresh(false) { token, _ in
+                cont.resume(returning: token)
+            } ?? cont.resume(returning: nil)
+        }
+
+        let pair = locationManager.latLonPair
+        guard let pair else {
+            await MainActor.run {
+                sosBusy = false
+                sosFeedback = "Location required. Enable location services and try again."
+            }
+            return
+        }
+
+        do {
+            let res = try await agentAPI.sendChat(
+                userId: authService.backendUserId,
+                sessionId: SessionIdentity.sessionId,
+                query: "Emergency button pressed",
+                lat: pair.lat,
+                lon: pair.lon,
+                triggerType: "EMERGENCY_BUTTON",
+                idToken: token
+            )
+            await MainActor.run {
+                sessionStore.lastResponse = res
+                sessionStore.lastErrorMessage = nil
+                sosBusy = false
+                UIActionRouting.apply(res.uiActions, selectedTab: $selectedTab)
+            }
+        } catch {
+            await MainActor.run {
+                sessionStore.lastErrorMessage = error.localizedDescription
+                sosBusy = false
+                sosFeedback = error.localizedDescription
+            }
+        }
+    }
 }
 
 #Preview {
-    DashboardView()
+    DashboardView(selectedTab: .constant(.dashboard))
         .environment(AuthService())
+        .environment(AgentAPIClient())
+        .environment(AgentSessionStore())
+        .environment(LocationManager())
 }

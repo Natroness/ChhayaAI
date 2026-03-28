@@ -26,6 +26,11 @@ final class AuthService {
         String(displayName.prefix(1)).uppercased()
     }
 
+    /// Firebase uid for `user_id` in agent API requests.
+    var backendUserId: String {
+        user?.uid ?? "anonymous"
+    }
+
     private var handle: AuthStateDidChangeListenerHandle?
 
     init() {

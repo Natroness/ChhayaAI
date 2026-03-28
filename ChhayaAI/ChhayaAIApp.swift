@@ -4,6 +4,9 @@ import FirebaseCore
 @main
 struct ChhayaAIApp: App {
     @State private var authService = AuthService()
+    @State private var agentAPIClient = AgentAPIClient()
+    @State private var agentSessionStore = AgentSessionStore()
+    @State private var locationManager = LocationManager()
 
     init() {
         FirebaseConfiguration.ensureConfigured()
@@ -23,6 +26,9 @@ struct ChhayaAIApp: App {
             .animation(.easeInOut(duration: 0.3), value: authService.isAuthenticated)
             .animation(.easeInOut(duration: 0.3), value: authService.isCheckingAuth)
             .environment(authService)
+            .environment(agentAPIClient)
+            .environment(agentSessionStore)
+            .environment(locationManager)
         }
     }
 

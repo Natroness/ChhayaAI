@@ -1,3 +1,4 @@
+import FirebaseAuth
 import SwiftUI
 import MapKit
 
@@ -30,6 +31,11 @@ struct AlertZone: Identifiable {
 }
 
 struct MapTabView: View {
+    @Environment(AuthService.self) private var authService
+    @Environment(AgentAPIClient.self) private var agentAPI
+    @Environment(AgentSessionStore.self) private var sessionStore
+    @Environment(LocationManager.self) private var locationManager
+
     @State private var cameraPosition: MapCameraPosition = .region(
         MKCoordinateRegion(
             center: CLLocationCoordinate2D(latitude: 28.6139, longitude: 77.2090),
@@ -38,6 +44,10 @@ struct MapTabView: View {
     )
     @State private var selectedUnitID: String?
     @State private var searchText = ""
+    @State private var mapLoading = false
+    @State private var mapError: String?
+    /// Last assistant text from the map refresh action (any `response_type`).
+    @State private var lastMapAssistantText: String?
 
     private let sampleUnits: [AmbulanceAnnotation] = [
         AmbulanceAnnotation(id: "AMB-2847", coordinate: .init(latitude: 28.617, longitude: 77.212), status: .enRoute, type: "Advanced Life Support"),
@@ -87,6 +97,7 @@ struct MapTabView: View {
 
             VStack(spacing: Spacing.space3) {
                 searchBar
+                backendBanner
                 if let selected = selectedUnit {
                     unitDetailSheet(selected)
                         .transition(.move(edge: .top).combined(with: .opacity))
@@ -101,6 +112,102 @@ struct MapTabView: View {
                 mapLegend
                     .padding(.horizontal, Spacing.screenPaddingH)
                     .padding(.bottom, Spacing.space4)
+            }
+        }
+        .onAppear {
+            locationManager.requestWhenInUse()
+        }
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    Task { await askMapAgent() }
+                } label: {
+                    if mapLoading {
+                        ProgressView()
+                    } else {
+                        Image(systemName: "arrow.triangle.2.circlepath")
+                    }
+                }
+                .disabled(mapLoading)
+                .accessibilityLabel("Refresh from assistant")
+            }
+        }
+    }
+
+    /// Calls backend with `MAP` intent; shows `chat_message` / map payload hints without fabricating units.
+    private var backendBanner: some View {
+        Group {
+            if let err = mapError {
+                Text(err)
+                    .textStyle(.caption)
+                    .foregroundStyle(SemanticColor.statusError)
+                    .padding(Spacing.space3)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(SemanticColor.statusError.opacity(0.1))
+                    .clipShape(RoundedRectangle(cornerRadius: AppRadius.sm))
+            } else if let msg = lastMapAssistantText?.trimmingCharacters(in: .whitespacesAndNewlines), !msg.isEmpty {
+                Text(msg)
+                    .textStyle(.caption)
+                    .foregroundStyle(SemanticColor.textPrimary)
+                    .padding(Spacing.space3)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(.ultraThinMaterial)
+                    .clipShape(RoundedRectangle(cornerRadius: AppRadius.sm))
+            }
+        }
+    }
+
+    private func askMapAgent() async {
+        await MainActor.run {
+            mapError = nil
+        }
+        let token: String? = await withCheckedContinuation { cont in
+            Auth.auth().currentUser?.getIDTokenForcingRefresh(false) { token, _ in
+                cont.resume(returning: token)
+            } ?? cont.resume(returning: nil)
+        }
+        let pair = locationManager.latLonPair
+        guard let pair else {
+            await MainActor.run {
+                mapError = "Turn on location to use the map assistant."
+            }
+            return
+        }
+        let q = searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? "nearby helpers"
+            : searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        await MainActor.run { mapLoading = true }
+        defer { Task { @MainActor in mapLoading = false } }
+
+        do {
+            let res = try await agentAPI.sendChat(
+                userId: authService.backendUserId,
+                sessionId: SessionIdentity.sessionId,
+                query: q,
+                lat: pair.lat,
+                lon: pair.lon,
+                triggerType: "CHAT",
+                idToken: token
+            )
+            let assistantText = [res.chatMessage, res.mapPayload?.message]
+                .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .first { !$0.isEmpty }
+            await MainActor.run {
+                sessionStore.lastResponse = res
+                lastMapAssistantText = assistantText
+                withAnimation {
+                    cameraPosition = .region(
+                        MKCoordinateRegion(
+                            center: CLLocationCoordinate2D(latitude: pair.lat, longitude: pair.lon),
+                            span: MKCoordinateSpan(latitudeDelta: 0.04, longitudeDelta: 0.04)
+                        )
+                    )
+                }
+            }
+        } catch {
+            await MainActor.run {
+                mapError = error.localizedDescription
             }
         }
     }
@@ -229,4 +336,8 @@ struct MapTabView: View {
 
 #Preview {
     MapTabView()
+        .environment(AuthService())
+        .environment(AgentAPIClient())
+        .environment(AgentSessionStore())
+        .environment(LocationManager())
 }

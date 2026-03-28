@@ -15,6 +15,7 @@ struct ContentView: View {
             }
         }
         .tint(ComponentColor.Nav.activeTint)
+        .environment(\.selectedTabBinding, $selectedTab)
     }
 
     @ViewBuilder
@@ -22,7 +23,7 @@ struct ContentView: View {
         switch tab {
         case .dashboard:
             NavigationStack {
-                DashboardView()
+                DashboardView(selectedTab: $selectedTab)
                     .navigationTitle("ChhayaAI")
                     .navigationBarTitleDisplayMode(.large)
                     .toolbar {

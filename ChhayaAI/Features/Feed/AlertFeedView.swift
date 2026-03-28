@@ -11,9 +11,12 @@ struct AlertItem: Identifiable {
 }
 
 struct AlertFeedView: View {
+    @Environment(AgentSessionStore.self) private var sessionStore
+
     @State private var selectedFilter: AlertFilter = .all
     @State private var searchText = ""
 
+    /// Static UI samples; live alert copy comes from the assistant above when available.
     private let alerts: [AlertItem] = AlertFeedView.sampleAlerts
 
     private var filteredAlerts: [AlertItem] {
@@ -93,12 +96,50 @@ struct AlertFeedView: View {
     private var alertList: some View {
         ScrollView {
             LazyVStack(spacing: Spacing.space3) {
+                backendAssistantCard
                 ForEach(filteredAlerts) { alert in
                     alertCard(alert)
                 }
             }
             .padding(.horizontal, Spacing.screenPaddingH)
             .padding(.vertical, Spacing.space4)
+        }
+    }
+
+    @ViewBuilder
+    private var backendAssistantCard: some View {
+        if let r = sessionStore.lastResponse,
+           let alert = r.alertPayload,
+           alert.message != nil || r.chatMessage != nil
+        {
+            InfoCard(severity: .warning) {
+                VStack(alignment: .leading, spacing: Spacing.space2) {
+                    Text("Assistant — alert")
+                        .textStyle(.labelSemibold)
+                        .foregroundStyle(SemanticColor.textPrimary)
+                    Text(alert.message ?? r.chatMessage ?? "")
+                        .textStyle(.body)
+                        .foregroundStyle(SemanticColor.textSecondary)
+                    if let n = alert.notifiedHelperCount, n > 0 {
+                        Text("Helpers notified: \(n)")
+                            .textStyle(.caption)
+                            .foregroundStyle(SemanticColor.textAccent)
+                    }
+                }
+            }
+        } else if let r = sessionStore.lastResponse,
+                  (r.responseType == "ALERT" || r.responseType == "EMERGENCY_FLOW"),
+                  let msg = r.chatMessage?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !msg.isEmpty
+        {
+            InfoCard(severity: .critical) {
+                VStack(alignment: .leading, spacing: Spacing.space2) {
+                    Text("Assistant — \(r.responseType.replacingOccurrences(of: "_", with: " ").lowercased())")
+                        .textStyle(.labelSemibold)
+                    Text(msg)
+                        .textStyle(.body)
+                }
+            }
         }
     }
 
