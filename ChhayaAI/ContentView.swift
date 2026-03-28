@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct ContentView: View {
+    @Environment(AuthService.self) private var authService
     @State private var selectedTab: AppTab = .dashboard
 
     var body: some View {
@@ -85,17 +86,26 @@ struct ContentView: View {
     }
 
     private var profileAvatar: some View {
-        ZStack {
-            Circle()
-                .fill(SemanticColor.actionPrimary.opacity(0.15))
-                .frame(width: 32, height: 32)
-            Text("A")
-                .textStyle(.captionSemibold)
-                .foregroundStyle(SemanticColor.actionPrimary)
+        Menu {
+            Text(authService.displayName)
+            Divider()
+            Button("Sign Out", systemImage: "rectangle.portrait.and.arrow.right") {
+                authService.signOut()
+            }
+        } label: {
+            ZStack {
+                Circle()
+                    .fill(SemanticColor.actionPrimary.opacity(0.15))
+                    .frame(width: 32, height: 32)
+                Text(authService.userInitial)
+                    .textStyle(.captionSemibold)
+                    .foregroundStyle(SemanticColor.actionPrimary)
+            }
         }
     }
 }
 
 #Preview {
     ContentView()
+        .environment(AuthService())
 }
