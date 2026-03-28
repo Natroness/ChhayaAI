@@ -6,22 +6,22 @@ from datetime import datetime, timezone
 # ---------------------------------------------------------------------------
 
 def _execute_query(gql: str) -> list:
-    # TODO: replace with app.database.spanner_client.execute_graph_query(gql)
+    # TODO: replace with app.db.spanner_client.SpannerClient().execute_graph_query(gql)
     return []
 
 
 def _upsert_live_user(user_id, lat, lon, role, session_id) -> None:
-    # TODO: replace with app.database.spanner_client.upsert_live_user(...)
+    # TODO: replace with app.db.spanner_client.SpannerClient().update_user_location(...)
     pass
 
 
 def _fetch_match(victim_id: str, helper_id: str) -> dict | None:
-    # TODO: replace with app.database.spanner_client.get_active_match(...)
+    # TODO: replace with app.db.spanner_client (match persistence)
     return None
 
 
 def _create_match(victim_id: str, helper_id: str, priority: int = 1) -> str:
-    # TODO: replace with app.database.spanner_client.create_match(...)
+    # TODO: replace with app.db.spanner_client (create match)
     return str(uuid.uuid4())
 
 

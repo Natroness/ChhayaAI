@@ -3,11 +3,7 @@ Transport-level auth checks only. Replace TODO with real JWT / JWKS verification
 """
 from __future__ import annotations
 
-import os
-
-
-def auth_required() -> bool:
-    return os.getenv("AUTH_REQUIRED", "").strip().lower() in ("1", "true", "yes")
+from app.config import auth_required
 
 
 def validate_authorization(authorization: str | None) -> tuple[bool, str | None]:

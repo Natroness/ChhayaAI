@@ -1,13 +1,18 @@
 """
-Spanner / graph access layer. Agents call these helpers; no routing or LLM logic here.
+Spanner / graph access layer. Lives under app/db (separate from app/memory Redis).
 """
 from __future__ import annotations
 
 import logging
 import math
-import os
 import uuid
 from typing import Any
+
+from app.config import (
+    get_spanner_database_id,
+    get_spanner_instance_id,
+    get_spanner_project_id,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -22,9 +27,9 @@ except ImportError:
 
 class SpannerClient:
     def __init__(self) -> None:
-        self._project_id = os.getenv("SPANNER_PROJECT_ID", "").strip()
-        self._instance_id = os.getenv("SPANNER_INSTANCE_ID", "").strip()
-        self._database_id = os.getenv("SPANNER_DATABASE_ID", "").strip()
+        self._project_id = get_spanner_project_id()
+        self._instance_id = get_spanner_instance_id()
+        self._database_id = get_spanner_database_id()
         self._client: Any = None
         self._database: Any = None
         self._disabled = not (
@@ -83,7 +88,6 @@ class SpannerClient:
             return {"ok": False, "error": "spanner_disabled"}
         try:
             self._ensure_database()
-            # TODO: DML upsert into LiveUser — table/columns must match your schema
             logger.debug("update_user_location stub user_id=%s role=%s", uid, role)
             return {"ok": True, "user_id": uid}
         except Exception as e:
@@ -105,7 +109,6 @@ class SpannerClient:
         lim = min(limit or 10, 100)
         try:
             self._ensure_database()
-            # TODO: parameterized graph/SQL for nearest helpers; radius in meters if supported
             logger.debug(
                 "get_nearby_helpers stub lat=%s lon=%s radius=%s limit=%s exclude=%s",
                 lat,
@@ -155,7 +158,6 @@ class SpannerClient:
         try:
             self._ensure_database()
             aid = str(uuid.uuid4())
-            # TODO: insert into Alerts
             logger.debug("create_alert_record stub alert_id=%s", aid)
             return {
                 "alert_id": aid,
@@ -186,7 +188,6 @@ class SpannerClient:
             return {"ok": False, "error": "spanner_disabled"}
         try:
             self._ensure_database()
-            # TODO: DML update Alerts set status, notified count
             logger.debug(
                 "update_alert_status stub alert_id=%s status=%s count=%s",
                 aid,
@@ -206,7 +207,6 @@ class SpannerClient:
             return None
         try:
             self._ensure_database()
-            # TODO: SELECT open alert for user where status in (ACTIVE, DISPATCHED, NO_HELPER_FOUND)
             logger.debug("get_active_alert_for_user stub user_id=%s", uid)
             return None
         except Exception as e:
@@ -214,7 +214,6 @@ class SpannerClient:
             return None
 
     def _run_query(self, query: str) -> list[Any]:
-        """Run a read (SQL). Spanner Graph GQL may require a separate API — TODO."""
         if self._database is None:
             return []
         with self._database.snapshot() as snapshot:

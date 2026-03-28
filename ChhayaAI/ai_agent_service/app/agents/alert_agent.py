@@ -6,13 +6,13 @@ from datetime import datetime, timezone
 # ---------------------------------------------------------------------------
 
 def _get_open_alert(user_id: str, session_id: str) -> dict | None:
-    # TODO: replace with app.database.spanner_client.get_open_alert(user_id, session_id)
+    # TODO: replace with app.db.spanner_client.SpannerClient().get_active_alert_for_user(user_id)
     # Open states: ACTIVE, DISPATCHED, NO_HELPER_FOUND
     return None
 
 
 def _save_alert(alert: dict) -> dict:
-    # TODO: replace with app.database.spanner_client.upsert_alert(alert)
+    # TODO: replace with app.db.spanner_client (persist alert)
     return alert
 
 

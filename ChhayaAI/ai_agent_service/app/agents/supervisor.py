@@ -6,7 +6,7 @@ from app.agents import llm_client
 from app.agents.alert_agent import handle_alert_task
 from app.agents.data_agent import handle_data_task
 from app.agents.map_agent import handle_map_task
-from app.database.redis_client import get_chat_history
+from app.memory.redis_client import get_chat_history, save_chat_message
 
 logger = logging.getLogger(__name__)
 
@@ -379,9 +379,15 @@ def process_user_request(user_id, session_id, query, lat, lon, trigger_type):
             response_type="DATA",
             ui_actions=["SHOW_ERROR", "SHOW_CHAT_MESSAGE"],
         )
+    sid = str(session_id).strip() if session_id is not None else ""
+    if sid and q.strip():
+        save_chat_message(sid, "user", q)
+    reply = agent_out.get("chat_message") or ""
+    if sid and reply.strip():
+        save_chat_message(sid, "assistant", reply)
     return build_supervisor_success_response(
         response_type=agent_out.get("response_type") or "CHAT",
-        chat_message=agent_out.get("chat_message") or "",
+        chat_message=reply,
         map_payload=None,
         alert_payload=None,
         data_payload=agent_out.get("data_payload"),

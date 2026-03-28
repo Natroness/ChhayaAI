@@ -14,6 +14,7 @@ from fastapi.responses import JSONResponse
 
 from app.agents.supervisor import process_user_request
 from app.auth.validator import validate_authorization
+from app.memory.redis_client import check_memory_connection
 from app.schemas.request_response import CommonRequest, CommonResponse
 
 logger = logging.getLogger(__name__)
@@ -40,6 +41,7 @@ async def _lifespan(_app: FastAPI):
         format="%(levelname)s %(name)s %(message)s",
     )
     logger.info("application startup")
+    check_memory_connection()
     yield
     logger.info("application shutdown")
 
