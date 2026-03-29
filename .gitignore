@@ -15,13 +15,13 @@ xcuserdata/
 *.mode2v3
 *.perspectivev3
 
-*.xcodeproj
-*.xcworkspace 
-##if it is your real workspace
-Package.swift
+## Xcode user-specific files inside the project bundle (NOT the project itself)
+*.xcodeproj/xcuserdata/
+*.xcworkspace/xcuserdata/
+*.xcworkspace/xcshareddata/IDEWorkspaceChecks.plist
 
-Package.resolved 
-##in most app repos
+## Package.resolved is fine to commit so dependency versions are locked
+## Package.swift should only be ignored if this is a library, not an app
 
 .cursor/
 
@@ -65,11 +65,13 @@ node_modules/
 .turbo/
 coverage/
 
-##Secrets and environment files
+## Secrets and environment files
 
 .env
 .env.*
 *.env
+GCP.json
+Secrets.xcconfig
 *.pem
 *.key
 *.p12
