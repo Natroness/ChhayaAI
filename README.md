@@ -6,7 +6,7 @@ A native iOS emergency response app with real-time location sharing, AI-powered 
 
 ### Dashboard
 
-![Dashboard](./images/dashboard.png)
+<img src="./images/dashboard.png" height="500" alt="Dashboard" />
 
 Your command center. One tap on the SOS button triggers the full emergency flow. Below it, you see the nearest ambulance, fire truck, and police unit with live distance calculations. Quick actions let you call 911, share your location, or message a friend instantly.
 
@@ -14,7 +14,7 @@ Your command center. One tap on the SOS button triggers the full emergency flow.
 
 ### Live Map
 
-![Live Map](./images/maps.png)
+<img src="./images/maps.png" height="500" alt="Live Map" />
 
 Emergency operators appear as colored markers: red for ambulances, orange for fire trucks, blue for police. Tap any marker to see details, distance, phone number, and status. Friends you've added show up here too, updating in real-time as they move.
 
@@ -22,7 +22,7 @@ Emergency operators appear as colored markers: red for ambulances, orange for fi
 
 ### AI Assistant
 
-![AI Assistant](./images/chat.png)
+<img src="./images/chat.png" height="500" alt="AI Assistant" />
 
 Ask anything. The backend classifies your intent and routes to specialized agents. Need help? It triggers an alert. Looking for directions? It updates the map. Just want to talk? It responds conversationally. All powered by a multi-agent system running on Cloud Run.
 
@@ -30,7 +30,7 @@ Ask anything. The backend classifies your intent and routes to specialized agent
 
 ### Notifications
 
-![Notifications](./images/notifications.png)
+<img src="./images/notifications.png" height="500" alt="Notifications" />
 
 Friend requests, accepted connections, and SOS alerts all appear here. When someone adds you or needs help, you'll know immediately.
 
