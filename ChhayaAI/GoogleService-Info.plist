@@ -9,7 +9,7 @@
 	<key>PLIST_VERSION</key>
 	<string>1</string>
 	<key>BUNDLE_ID</key>
-	<string>com.mhosigiri.ChhayaAI</string>
+	<string>com.arnis.chhayaai</string>
 	<key>PROJECT_ID</key>
 	<string>chhayaai</string>
 	<key>STORAGE_BUCKET</key>
@@ -25,6 +25,6 @@
 	<key>IS_SIGNIN_ENABLED</key>
 	<true></true>
 	<key>GOOGLE_APP_ID</key>
-	<string>1:776311025252:ios:dbfacc5b492ef9c5657971</string>
+	<string>1:776311025252:ios:95255b29b98683ed657971</string>
 </dict>
 </plist>

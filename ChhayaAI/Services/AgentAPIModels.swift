@@ -63,12 +63,15 @@ struct DataPayloadDTO: Decodable {
 }
 
 enum AgentAPIError: LocalizedError {
+    case invalidBaseURL(String)
     case invalidResponse
     case httpStatus(Int, String?)
     case decoding(Error)
 
     var errorDescription: String? {
         switch self {
+        case .invalidBaseURL(let message):
+            return message
         case .invalidResponse:
             return "Invalid server response."
         case .httpStatus(let code, let body):

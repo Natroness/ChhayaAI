@@ -7,6 +7,9 @@ struct ChhayaAIApp: App {
     @State private var agentAPIClient = AgentAPIClient()
     @State private var agentSessionStore = AgentSessionStore()
     @State private var locationManager = LocationManager()
+    @State private var userProfileStore = UserProfileStore.shared
+    @State private var friendService = FriendService.shared
+    @State private var emergencyOperatorService = EmergencyOperatorService.shared
 
     init() {
         FirebaseConfiguration.ensureConfigured()
@@ -30,6 +33,9 @@ struct ChhayaAIApp: App {
             .environment(agentAPIClient)
             .environment(agentSessionStore)
             .environment(locationManager)
+            .environment(userProfileStore)
+            .environment(friendService)
+            .environment(emergencyOperatorService)
         }
     }
 

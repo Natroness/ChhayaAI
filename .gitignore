@@ -24,7 +24,7 @@ xcuserdata/
 ## Package.swift should only be ignored if this is a library, not an app
 
 .cursor/
-
+.DS_Store
 design-tokens-summary.md
 
 .build/
@@ -84,3 +84,6 @@ service-account*.json
 firebase-adminsdk*.json
 supabase/.temp/
 supabase/.branches/
+
+
+.DerivedData/

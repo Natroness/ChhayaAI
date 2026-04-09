@@ -25,7 +25,9 @@ struct DashboardView: View {
     @Environment(AuthService.self) private var authService
     @Environment(AgentAPIClient.self) private var agentAPI
     @Environment(AgentSessionStore.self) private var sessionStore
+    @Environment(FriendService.self) private var friendService
     @Environment(LocationManager.self) private var locationManager
+    @Environment(EmergencyOperatorService.self) private var operatorService
     @Environment(\.openURL) private var openURL
 
     @Binding var selectedTab: AppTab
@@ -46,6 +48,7 @@ struct DashboardView: View {
     @State private var messageRecipients: [String] = []
     @State private var messageBody = ""
     @State private var showingMessageComposer = false
+    @State private var showingFriendsHub = false
 
     var body: some View {
         ScrollView {
@@ -56,6 +59,7 @@ struct DashboardView: View {
                 }
                 activeAlertBanner
                 liveLocationSection
+                closeFriendsSection
                 quickNavigationSection
                 nearbyUnitsSection
                 recentActivitySection
@@ -108,6 +112,9 @@ struct DashboardView: View {
             MessageComposerSheet(recipients: messageRecipients, body: messageBody) {
                 showingMessageComposer = false
             }
+        }
+        .sheet(isPresented: $showingFriendsHub) {
+            FriendsHubView()
         }
     }
 
@@ -335,6 +342,64 @@ struct DashboardView: View {
 
     // MARK: - Navigation
 
+    private var closeFriendsSection: some View {
+        VStack(alignment: .leading, spacing: Spacing.space3) {
+            HStack {
+                Text("Close Friends")
+                    .textStyle(.headingMD)
+                    .foregroundStyle(SemanticColor.textPrimary)
+                Spacer()
+                Button("Manage") {
+                    showingFriendsHub = true
+                }
+                .textStyle(.labelSemibold)
+                .foregroundStyle(SemanticColor.actionPrimary)
+            }
+
+            InfoCard {
+                VStack(alignment: .leading, spacing: Spacing.space3) {
+                    Text(friendSummaryTitle)
+                        .textStyle(.labelBold)
+                        .foregroundStyle(SemanticColor.textPrimary)
+                    Text(friendSummarySubtitle)
+                        .textStyle(.caption)
+                        .foregroundStyle(SemanticColor.textSecondary)
+
+                    AppButton(
+                        title: "Open close friends",
+                        icon: "person.2.fill",
+                        style: .secondary
+                    ) {
+                        showingFriendsHub = true
+                    }
+                }
+            }
+        }
+    }
+
+    private var friendSummaryTitle: String {
+        let accepted = friendService.acceptedFriends.count
+        let pending = friendService.incomingRequests.filter { $0.status == .pending }.count
+
+        if accepted == 0, pending == 0 {
+            return "No close friends yet"
+        }
+        if pending > 0 {
+            return "\(accepted) close friends, \(pending) pending request\(pending == 1 ? "" : "s")"
+        }
+        return "\(accepted) close friend\(accepted == 1 ? "" : "s") connected"
+    }
+
+    private var friendSummarySubtitle: String {
+        if let pending = friendService.incomingRequests.first(where: { $0.status == .pending }) {
+            return "\(pending.fromDisplayName) sent you a request."
+        }
+        if let first = friendService.acceptedFriends.first {
+            return "\(first.displayName) will be able to share live location once phase 3 is wired up."
+        }
+        return "Add trusted people now so live location sharing is ready for the next phase."
+    }
+
     private var quickNavigationSection: some View {
         VStack(alignment: .leading, spacing: Spacing.space3) {
             Text("Navigate")
@@ -377,26 +442,68 @@ struct DashboardView: View {
                 .foregroundStyle(SemanticColor.actionPrimary)
             }
 
-            InfoCard {
-                VStack(alignment: .leading, spacing: Spacing.space2) {
-                    if let matchedUser = sessionStore.lastResponse?.mapPayload?.matchedUser {
-                        Text(matchedUser.name ?? "Nearby support located")
+            if operatorService.operators.isEmpty {
+                InfoCard {
+                    VStack(alignment: .leading, spacing: Spacing.space2) {
+                        Text("No emergency units loaded yet.")
+                            .textStyle(.body)
+                            .foregroundStyle(SemanticColor.textSecondary)
+                        Button("Go to map tab") {
+                            selectedTab = .map
+                        }
+                        .textStyle(.labelSemibold)
+                        .foregroundStyle(SemanticColor.actionPrimary)
+                    }
+                }
+            } else {
+                let nearest = operatorService.nearestByType
+                ForEach(EmergencyOperatorType.allCases, id: \.rawValue) { type in
+                    if let op = nearest[type] {
+                        nearbyUnitRow(op)
+                    }
+                }
+            }
+        }
+        .onAppear {
+            operatorService.startListening()
+            if let coord = locationManager.coordinate {
+                operatorService.updateDistances(from: coord)
+            }
+        }
+    }
+
+    private func nearbyUnitRow(_ op: EmergencyOperatorRecord) -> some View {
+        InfoCard {
+            HStack(spacing: Spacing.space3) {
+                ZStack {
+                    Circle()
+                        .fill(Color(op.type.markerColor).opacity(0.12))
+                        .frame(width: 44, height: 44)
+                    Image(systemName: op.type.systemImage)
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundStyle(Color(op.type.markerColor))
+                }
+
+                VStack(alignment: .leading, spacing: Spacing.space1) {
+                    HStack {
+                        Text(op.label)
                             .textStyle(.labelBold)
                             .foregroundStyle(SemanticColor.textPrimary)
-                        Text(matchedUser.role ?? "Matched user")
-                            .textStyle(.caption)
-                            .foregroundStyle(SemanticColor.textSecondary)
-                    } else {
-                        Text("Live matches come from the map agent when location is enabled.")
-                            .textStyle(.body)
+                        Spacer()
+                        Text(op.formattedDistance)
+                            .textStyle(.captionMedium)
                             .foregroundStyle(SemanticColor.textSecondary)
                     }
 
-                    Button("Go to map tab") {
-                        selectedTab = .map
+                    Text("\(op.type.displayName) \u{2022} \(op.status.capitalized)")
+                        .textStyle(.caption)
+                        .foregroundStyle(SemanticColor.textSecondary)
+
+                    if !op.phone.isEmpty {
+                        Text(op.phone)
+                            .textStyle(.caption)
+                            .foregroundStyle(SemanticColor.actionPrimary)
                     }
-                    .textStyle(.labelSemibold)
-                    .foregroundStyle(SemanticColor.actionPrimary)
                 }
             }
         }
@@ -719,5 +826,7 @@ struct DashboardView: View {
         .environment(AuthService())
         .environment(AgentAPIClient())
         .environment(AgentSessionStore())
+        .environment(FriendService.shared)
         .environment(LocationManager())
+        .environment(EmergencyOperatorService.shared)
 }

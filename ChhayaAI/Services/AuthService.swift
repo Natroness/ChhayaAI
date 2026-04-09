@@ -39,6 +39,8 @@ final class AuthService {
             Task { @MainActor in
                 self?.user = user
                 self?.isCheckingAuth = false
+                UserProfileStore.shared.handleAuthStateChange(user: user)
+                FriendService.shared.handleAuthStateChange(user: user)
             }
         }
     }
@@ -72,6 +74,11 @@ final class AuthService {
             changeRequest.displayName = fullName
             try await changeRequest.commitChanges()
             user = Auth.auth().currentUser
+            if let currentUser = Auth.auth().currentUser {
+                await UserProfileStore.shared.createInitialProfile(for: currentUser)
+            } else {
+                await UserProfileStore.shared.createInitialProfile(for: result.user)
+            }
         } catch {
             logAuthError(error, operation: "signUp")
             errorMessage = mapError(error)
@@ -82,6 +89,8 @@ final class AuthService {
     func signOut() {
         do {
             try Auth.auth().signOut()
+            UserProfileStore.shared.handleAuthStateChange(user: nil)
+            FriendService.shared.handleAuthStateChange(user: nil)
         } catch {
             logAuthError(error, operation: "signOut")
             errorMessage = mapError(error)

@@ -5,24 +5,27 @@ import GoogleMaps
 import SwiftUI
 
 private struct LiveMapMarker: Identifiable, Hashable {
-    enum Kind {
+    enum Kind: Hashable {
         case requester
         case matchedUser
         case nearbyUser
+        case emergencyOperator(EmergencyOperatorType)
 
         var title: String {
             switch self {
-            case .requester:   return "You"
-            case .matchedUser: return "Matched User"
-            case .nearbyUser:  return "Nearby User"
+            case .requester:                  return "You"
+            case .matchedUser:                return "Matched User"
+            case .nearbyUser:                 return "Nearby User"
+            case .emergencyOperator(let t):   return t.displayName
             }
         }
 
         var color: UIColor {
             switch self {
-            case .requester:   return .systemBlue
-            case .matchedUser: return .systemRed
-            case .nearbyUser:  return .systemGreen
+            case .requester:                  return .systemBlue
+            case .matchedUser:                return .systemRed
+            case .nearbyUser:                 return .systemGreen
+            case .emergencyOperator(let t):   return t.markerColor
             }
         }
     }
@@ -32,6 +35,7 @@ private struct LiveMapMarker: Identifiable, Hashable {
     let name: String
     let subtitle: String
     let kind: Kind
+    var operatorRecord: EmergencyOperatorRecord?
 
     static func == (lhs: LiveMapMarker, rhs: LiveMapMarker) -> Bool {
         lhs.id == rhs.id
@@ -180,6 +184,7 @@ struct MapTabView: View {
     @Environment(AgentAPIClient.self) private var agentAPI
     @Environment(AgentSessionStore.self) private var sessionStore
     @Environment(LocationManager.self) private var locationManager
+    @Environment(EmergencyOperatorService.self) private var operatorService
     @Environment(\.openURL) private var openURL
 
     @State private var selectedMarkerID: String?
@@ -188,6 +193,7 @@ struct MapTabView: View {
     @State private var mapError: String?
     @State private var lastMapAssistantText: String?
     @State private var cameraRequestID = UUID()
+    @State private var showOperators = true
 
     private let fallbackCenter = CLLocationCoordinate2D(latitude: 41.8781, longitude: -87.6298)
 
@@ -268,6 +274,24 @@ struct MapTabView: View {
             seen.insert(id)
         }
 
+        if showOperators {
+            for op in operatorService.operators {
+                let id = "op-\(op.operatorId)"
+                if seen.contains(id) { continue }
+                markers.append(
+                    LiveMapMarker(
+                        id: id,
+                        coordinate: CLLocationCoordinate2D(latitude: op.lat, longitude: op.lon),
+                        name: op.label,
+                        subtitle: "\(op.type.displayName) \u{2022} \(op.formattedDistance)",
+                        kind: .emergencyOperator(op.type),
+                        operatorRecord: op
+                    )
+                )
+                seen.insert(id)
+            }
+        }
+
         return markers
     }
 
@@ -313,19 +337,38 @@ struct MapTabView: View {
         }
         .onAppear {
             locationManager.requestWhenInUse()
+            operatorService.startListening()
             cameraRequestID = UUID()
+            if let coord = locationManager.coordinate {
+                operatorService.updateDistances(from: coord)
+            }
         }
         .onChange(of: locationManager.coordinate?.latitude) {
             if mapPayload?.requester == nil {
                 cameraRequestID = UUID()
+            }
+            if let coord = locationManager.coordinate {
+                operatorService.updateDistances(from: coord)
             }
         }
         .onChange(of: locationManager.coordinate?.longitude) {
             if mapPayload?.requester == nil {
                 cameraRequestID = UUID()
             }
+            if let coord = locationManager.coordinate {
+                operatorService.updateDistances(from: coord)
+            }
         }
         .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button {
+                    showOperators.toggle()
+                } label: {
+                    Image(systemName: showOperators ? "shield.checkered" : "shield.slash")
+                }
+                .accessibilityLabel(showOperators ? "Hide emergency units" : "Show emergency units")
+            }
+
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
                     Task { await askMapAgent() }
@@ -416,6 +459,17 @@ struct MapTabView: View {
         InfoCard {
             VStack(alignment: .leading, spacing: Spacing.space3) {
                 HStack {
+                    if let op = marker.operatorRecord {
+                        ZStack {
+                            Circle()
+                                .fill(Color(op.type.markerColor).opacity(0.12))
+                                .frame(width: 40, height: 40)
+                            Image(systemName: op.type.systemImage)
+                                .font(.system(size: 18, weight: .semibold))
+                                .foregroundStyle(Color(op.type.markerColor))
+                        }
+                    }
+
                     VStack(alignment: .leading, spacing: Spacing.space1) {
                         Text(marker.name)
                             .textStyle(.labelBold)
@@ -425,13 +479,30 @@ struct MapTabView: View {
                             .foregroundStyle(SemanticColor.textSecondary)
                     }
                     Spacer()
-                    Text(marker.kind.title)
-                        .textStyle(.captionMedium)
-                        .foregroundStyle(SemanticColor.actionPrimary)
-                        .padding(.horizontal, Spacing.space3)
-                        .padding(.vertical, Spacing.space1_5)
-                        .background(SemanticColor.actionPrimary.opacity(0.08))
-                        .clipShape(Capsule())
+
+                    operatorBadge(for: marker)
+                }
+
+                if let op = marker.operatorRecord {
+                    VStack(alignment: .leading, spacing: Spacing.space2) {
+                        if !op.operatorDescription.isEmpty {
+                            Text(op.operatorDescription)
+                                .textStyle(.caption)
+                                .foregroundStyle(SemanticColor.textSecondary)
+                        }
+
+                        HStack(spacing: Spacing.space4) {
+                            detailPill(icon: "phone.fill", text: op.phone)
+                            detailPill(icon: "mappin.and.ellipse", text: op.formattedDistance)
+                        }
+
+                        HStack(spacing: Spacing.space2) {
+                            StatusBadge(variant: op.status == "available" ? .active : .enRoute)
+                            Text(op.status.capitalized)
+                                .textStyle(.caption)
+                                .foregroundStyle(SemanticColor.textSecondary)
+                        }
+                    }
                 }
 
                 HStack(spacing: Spacing.space3) {
@@ -446,18 +517,68 @@ struct MapTabView: View {
                     }
 
                     if marker.kind != .requester {
-                        AppButton(
-                            title: "Directions",
-                            icon: "arrow.triangle.turn.up.right.diamond.fill",
-                            style: .outline,
-                            isFullWidth: true
-                        ) {
-                            openDirections(to: marker.coordinate)
+                        if let op = marker.operatorRecord, !op.phone.isEmpty {
+                            AppButton(
+                                title: "Call",
+                                icon: "phone.fill",
+                                style: .outline,
+                                isFullWidth: true
+                            ) {
+                                callPhone(op.phone)
+                            }
+                        } else {
+                            AppButton(
+                                title: "Directions",
+                                icon: "arrow.triangle.turn.up.right.diamond.fill",
+                                style: .outline,
+                                isFullWidth: true
+                            ) {
+                                openDirections(to: marker.coordinate)
+                            }
                         }
                     }
                 }
             }
         }
+    }
+
+    @ViewBuilder
+    private func operatorBadge(for marker: LiveMapMarker) -> some View {
+        switch marker.kind {
+        case .emergencyOperator(let type):
+            Text(type.displayName)
+                .textStyle(.captionMedium)
+                .foregroundStyle(Color(type.markerColor))
+                .padding(.horizontal, Spacing.space3)
+                .padding(.vertical, Spacing.space1_5)
+                .background(Color(type.markerColor).opacity(0.08))
+                .clipShape(Capsule())
+        default:
+            Text(marker.kind.title)
+                .textStyle(.captionMedium)
+                .foregroundStyle(SemanticColor.actionPrimary)
+                .padding(.horizontal, Spacing.space3)
+                .padding(.vertical, Spacing.space1_5)
+                .background(SemanticColor.actionPrimary.opacity(0.08))
+                .clipShape(Capsule())
+        }
+    }
+
+    private func detailPill(icon: String, text: String) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: icon)
+                .font(.system(size: 11))
+                .foregroundStyle(SemanticColor.textSecondary)
+            Text(text)
+                .textStyle(.caption)
+                .foregroundStyle(SemanticColor.textPrimary)
+        }
+    }
+
+    private func callPhone(_ number: String) {
+        let cleaned = number.components(separatedBy: CharacterSet.decimalDigits.inverted).joined()
+        guard let url = URL(string: "tel://\(cleaned)") else { return }
+        openURL(url)
     }
 
     // MARK: - Actions
@@ -572,4 +693,5 @@ struct MapTabView: View {
         .environment(AgentAPIClient())
         .environment(AgentSessionStore())
         .environment(LocationManager())
+        .environment(EmergencyOperatorService.shared)
 }

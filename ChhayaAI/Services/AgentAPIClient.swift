@@ -18,7 +18,7 @@ final class AgentAPIClient {
         triggerType: String,
         idToken: String?
     ) async throws -> CommonResponseDTO {
-        let base = AgentAPIConfiguration.baseURL
+        let base = try AgentAPIConfiguration.validatedBaseURL()
         let path = base.appendingPathComponent("v1").appendingPathComponent("chat")
         var request = URLRequest(url: path)
         request.httpMethod = "POST"
