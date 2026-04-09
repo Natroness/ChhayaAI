@@ -87,3 +87,7 @@ supabase/.branches/
 
 
 .DerivedData/
+ai_agent_service/seed_firestore.py
+
+file-by-file-coding-checklist.md
+live-location-sos-implementation.md
